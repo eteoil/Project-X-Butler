@@ -1,1 +1,9 @@
-a
+{
+  "name": "project-x-butler",
+  "version": "1.0.0",
+  "description": "Automation bot for X (formerly Twitter)",
+  "main": "src/index.js",
+  "author": "eteoil",
+  "license": "MIT",
+  "private": true
+}
