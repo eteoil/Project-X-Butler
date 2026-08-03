@@ -1,1 +1,5 @@
-a
+node_modules/
+.env
+logs/*.log
+playwright-report/
+test-results/
