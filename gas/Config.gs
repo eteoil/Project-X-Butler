@@ -92,11 +92,13 @@ function readKeywordSheet_() {
  */
 function getCredentials_() {
   var props = PropertiesService.getScriptProperties();
+
+  // コピペで前後に空白や改行が紛れ込むと署名が合わなくなり 401 になるので、必ず取り除く
   var creds = {
-    apiKey: props.getProperty('X_API_KEY'),
-    apiSecret: props.getProperty('X_API_SECRET'),
-    accessToken: props.getProperty('X_ACCESS_TOKEN'),
-    accessSecret: props.getProperty('X_ACCESS_TOKEN_SECRET'),
+    apiKey: trimOrEmpty_(props.getProperty('X_API_KEY')),
+    apiSecret: trimOrEmpty_(props.getProperty('X_API_SECRET')),
+    accessToken: trimOrEmpty_(props.getProperty('X_ACCESS_TOKEN')),
+    accessSecret: trimOrEmpty_(props.getProperty('X_ACCESS_TOKEN_SECRET')),
   };
 
   var missing = [];
@@ -121,6 +123,10 @@ function getSheetOrThrow_(name) {
     throw new Error('「' + name + '」シートが見つかりません。メニューの「初期セットアップ」を実行してください。');
   }
   return sheet;
+}
+
+function trimOrEmpty_(value) {
+  return value ? String(value).trim() : '';
 }
 
 /** チェックボックス・TRUE/FALSE・「はい」などをまとめて真偽値にする */

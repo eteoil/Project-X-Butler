@@ -21,6 +21,7 @@ function onOpen() {
     .addItem('自動実行の状態を確認', 'showTriggerStatus')
     .addSeparator()
     .addItem('接続テスト', 'testConnection')
+    .addItem('認証診断（401が出るとき）', 'diagnoseAuth')
     .addToUi();
 }
 

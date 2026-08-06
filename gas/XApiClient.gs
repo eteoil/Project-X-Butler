@@ -6,7 +6,9 @@
  * そのまま使えて、トークンの有効期限も更新処理もないため、この用途では一番簡単。
  */
 
-var X_API_BASE = 'https://api.x.com/2';
+// 公式ドキュメントや各種SDKが使うホスト。api.x.com はリダイレクトされる場合があり、
+// OAuth 1.0a の署名はURLごとに作るためリダイレクト先では認証できなくなる。
+var X_API_BASE = 'https://api.twitter.com/2';
 
 /**
  * ユーザー名（@なし）から数値のユーザーIDを取得する。
@@ -124,6 +126,9 @@ function xApiRequest_(method, url, queryParams, bodyObj) {
     method: method.toLowerCase(),
     headers: { Authorization: buildOAuthHeader_(method, url, queryParams) },
     muteHttpExceptions: true,
+    // 署名はURLごとに作るので、リダイレクトを追うと必ず認証に失敗する。
+    // 黙って401になると原因が分からないため、追わずにここで気づけるようにする。
+    followRedirects: false,
   };
   if (bodyObj) {
     options.contentType = 'application/json';
@@ -134,6 +139,15 @@ function xApiRequest_(method, url, queryParams, bodyObj) {
   var code = response.getResponseCode();
   var body = response.getContentText();
 
+  if (code >= 300 && code < 400) {
+    var headers = response.getHeaders();
+    var location = headers.Location || headers.location || '(不明)';
+    throw new Error(
+      'X API がリダイレクトを返しました（HTTP ' + code + ' → ' + location + '）。' +
+      'OAuth 署名はURLごとに作るため、リダイレクト先では認証できません。' +
+      'XApiClient.gs の X_API_BASE を見直してください。'
+    );
+  }
   if (code === 429) {
     throw new Error('X API のレート制限に達しました。しばらく待ってから再実行してください。');
   }
