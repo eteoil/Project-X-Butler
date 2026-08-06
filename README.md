@@ -10,12 +10,13 @@ Google Cloud、Playwright、Google Apps Script（GAS）、Google スプレッド
 
 ## ✨ Features
 
-### v1.0（開発中）
+### v1.0
 
 - 🔁 キーワードによる自動リポスト
 - ❤️ キーワードによる自動いいね
-- 📊 実行ログ保存
-- ⚙️ スプレッドシートによる設定管理
+- 📊 実行ログ保存（`logs/YYYY-MM-DD.log` に JSON Lines 形式で保存）
+- ⚙️ スプレッドシートによる設定管理（Google Sheets、任意。未設定時はローカルの `config/config.json` を使用）
+- 🧪 テストモード（既定で有効。実際のリポスト／いいねは行わず、判定結果だけをログに記録）
 
 ### 🚀 Planned Features
 
@@ -30,12 +31,12 @@ Google Cloud、Playwright、Google Apps Script（GAS）、Google スプレッド
 
 ## 🛠 Tech Stack
 
-- Node.js
+- Node.js（ESM, `node:test`）
 - Playwright
 - Google Cloud Run
 - Google Cloud Scheduler
 - Google Apps Script (GAS)
-- Google Sheets
+- Google Sheets（`googleapis`）
 
 ---
 
@@ -45,13 +46,60 @@ Google Cloud、Playwright、Google Apps Script（GAS）、Google スプレッド
 Project-X-Butler/
 │
 ├── config/
-├── logs/
+│   └── config.example.json   # コピーして config/config.json を作る
+├── logs/                     # 実行ログ（.gitignore 対象）
 ├── src/
-├── test/
+│   ├── actions/              # repost / like（テストモード分岐込み）
+│   ├── x/                    # login / profile / timeline（Playwright操作）
+│   ├── browser.js            # ブラウザ起動・セッション再利用
+│   ├── config.js             # ローカル設定 + Google Sheets 設定の読み込み
+│   ├── keyword.js            # キーワード判定ロジック
+│   ├── logger.js             # 実行ログ出力
+│   └── index.js              # エントリーポイント（一連の処理を実行）
+├── test/                     # node:test によるユニットテスト
+├── .env.example
 ├── .gitignore
 ├── package.json
 └── README.md
 ```
+
+---
+
+## 🚀 Setup
+
+```bash
+npm install
+cp .env.example .env
+cp config/config.example.json config/config.json
+```
+
+`.env` に X のログイン情報を設定します。
+
+```
+X_USERNAME=your-username-or-email
+X_PASSWORD=your-password
+TEST_MODE=true   # false にすると実際にリポスト/いいねを実行する
+```
+
+`config/config.json` でリポスト・いいねの対象キーワードや実行件数の上限を設定します（`config/config.example.json` 参照）。
+
+## ▶️ Usage
+
+```bash
+npm start      # config.json / .env の設定に従って1回実行
+npm test       # ユニットテスト実行(実ブラウザ・実X接続は不要)
+```
+
+`TEST_MODE=true`（既定値）のときは、キーワード判定とログ出力のみ行い、実際のクリック操作は行いません。本番実行前に必ずテストモードで動作を確認してください。
+
+## ⚙️ Google Sheets 連携（任意）
+
+`config.json` の `googleSheets.enabled` を `true` にすると、以下のシートから設定・キーワードを読み込みます（ローカルの `config.json` を上書き）。
+
+- **Config シート**（`key`, `value` の2列）: `testMode` などの設定値
+- **Keywords シート**（`action`, `keyword`, `enabled` の3列）: `action` は `repost` または `like`、`enabled` を `false` にするとその行を無視
+
+サービスアカウントの認証情報ファイルへのパスを `.env` の `GOOGLE_SERVICE_ACCOUNT_FILE` に、対象スプレッドシートIDを `GOOGLE_SPREADSHEET_ID` に設定してください。サービスアカウントのメールアドレスをスプレッドシートの閲覧者として共有する必要があります。
 
 ---
 
@@ -66,32 +114,32 @@ Project-X-Butler/
 
 ### Day 2
 
-- [ ] npm 初期化
-- [ ] Playwright インストール
-- [ ] ブラウザ起動
+- [x] npm 初期化
+- [x] Playwright インストール
+- [x] ブラウザ起動（`src/browser.js`）
 
 ### Day 3
 
-- [ ] X を開く
-- [ ] ログイン
+- [x] X を開く
+- [x] ログイン（`src/x/login.js`、実アカウントでの動作確認は未実施）
 
 ### Day 4
 
-- [ ] プロフィール取得
-- [ ] 投稿一覧取得
+- [x] プロフィール取得（`src/x/profile.js`）
+- [x] 投稿一覧取得（`src/x/timeline.js`）
 
 ### Day 5
 
-- [ ] キーワード判定
-- [ ] テストモード実装
+- [x] キーワード判定（`src/keyword.js`）
+- [x] テストモード実装（`TEST_MODE` / `config.testMode`）
 
 ### Day 6
 
-- [ ] 自動リポスト
+- [x] 自動リポスト（`src/actions/repost.js`）
 
 ### Day 7
 
-- [ ] 自動いいね
+- [x] 自動いいね（`src/actions/like.js`）
 
 ---
 
