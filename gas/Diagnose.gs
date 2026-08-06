@@ -67,9 +67,14 @@ function diagnoseAuth() {
   SpreadsheetApp.getUi().alert('認証診断', report, SpreadsheetApp.getUi().ButtonSet.OK);
 }
 
+// このファイルを更新したかどうかを画面上で判別できるようにしておく
+var DIAGNOSE_VERSION = 'v3';
+
 function buildDiagnosisReport_() {
   var lines = [];
 
+  lines.push('診断ツール ' + DIAGNOSE_VERSION);
+  lines.push('');
   lines.push('【1】認証情報の形式');
   lines = lines.concat(checkCredentialShapes_());
 
@@ -87,10 +92,57 @@ function buildDiagnosisReport_() {
   return lines.join('\n');
 }
 
+/**
+ * 値の「見た目の特徴」を、中身を明かさずに説明する。
+ * スクリーンショットを共有しても安全なように、実際の文字は一切出さない。
+ */
+function describeShape_(value) {
+  var facts = [];
+
+  var hyphenAt = value.indexOf('-');
+  facts.push(hyphenAt === -1 ? 'ハイフンなし' : 'ハイフン' + (hyphenAt + 1) + '文字目');
+
+  var kinds = [];
+  if (/[a-z]/.test(value)) kinds.push('小文字');
+  if (/[A-Z]/.test(value)) kinds.push('大文字');
+  if (/[0-9]/.test(value)) kinds.push('数字');
+
+  // 記号の種類は正体を突き止める手がかりになる（= なら Base64、. が2つなら JWT など）
+  var symbols = value.replace(/[a-zA-Z0-9]/g, '');
+  var uniqueSymbols = '';
+  for (var i = 0; i < symbols.length; i++) {
+    if (uniqueSymbols.indexOf(symbols.charAt(i)) === -1) uniqueSymbols += symbols.charAt(i);
+  }
+  if (uniqueSymbols) kinds.push('記号[' + uniqueSymbols + ']');
+
+  facts.push(kinds.join('+'));
+  facts.push(/^\d/.test(value) ? '数字で始まる' : '数字以外で始まる');
+
+  return facts.join(' / ');
+}
+
+/** 同じ値を複数の欄に貼っていないかを調べる */
+function findDuplicates_(values) {
+  var duplicates = [];
+
+  for (var i = 0; i < CREDENTIAL_SHAPES.length; i++) {
+    for (var j = i + 1; j < CREDENTIAL_SHAPES.length; j++) {
+      var a = values[CREDENTIAL_SHAPES[i].name];
+      var b = values[CREDENTIAL_SHAPES[j].name];
+      if (a && b && a === b) {
+        duplicates.push('⚠️ ' + CREDENTIAL_SHAPES[i].label + ' と ' +
+                        CREDENTIAL_SHAPES[j].label + ' に同じ値が入っています');
+      }
+    }
+  }
+  return duplicates;
+}
+
 /** 認証情報の文字数・形式だけを確認する（値そのものは表示しない） */
 function checkCredentialShapes_() {
   var props = PropertiesService.getScriptProperties();
   var lines = [];
+  var values = {};
 
   for (var i = 0; i < CREDENTIAL_SHAPES.length; i++) {
     var shape = CREDENTIAL_SHAPES[i];
@@ -102,6 +154,7 @@ function checkCredentialShapes_() {
     }
 
     var value = String(raw).trim();
+    values[shape.name] = value;
     var warnings = [];
 
     if (String(raw) !== value) {
@@ -115,10 +168,12 @@ function checkCredentialShapes_() {
 
     lines.push(
       (warnings.length > 0 ? '⚠️ ' : '✅ ') + shape.label + ': ' + value.length + '文字' +
-      (warnings.length > 0 ? '\n　　→ ' + warnings.join('/ ') : '')
+      '\n　　特徴: ' + describeShape_(value) +
+      (warnings.length > 0 ? '\n　　→ ' + warnings.join(' / ') : '')
     );
   }
-  return lines;
+
+  return lines.concat(findDuplicates_(values));
 }
 
 /**
