@@ -1,7 +1,0 @@
-node_modules/
-logs/*.log
-!logs/.gitkeep
-.env
-config/config.json
-config/service-account.json
-storage-state.json

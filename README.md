@@ -2,7 +2,8 @@
 
 Project X Butler は、X（旧Twitter）の運用を支援する自動化Botです。
 
-Google Cloud、Playwright、Google Apps Script（GAS）、Google スプレッドシートを利用し、ルールに従って自動で投稿やリアクションを行います。
+Google Apps Script（GAS）と Google スプレッドシートだけで動き、**公式の X API** を通じて、
+指定したアカウントの投稿からキーワードに一致したものを自動でリポストします。
 
 > **Project X Butler は、運用ルールをコードではなく設定で管理し、誰でも扱いやすい X 自動化Bot を目指すプロジェクトです。**
 
@@ -12,31 +13,47 @@ Google Cloud、Playwright、Google Apps Script（GAS）、Google スプレッド
 
 ### v1.0
 
-- 🔁 キーワードによる自動リポスト
-- ❤️ キーワードによる自動いいね
-- 📊 実行ログ保存（`logs/YYYY-MM-DD.log` に JSON Lines 形式で保存）
-- ⚙️ スプレッドシートによる設定管理（Google Sheets、任意。未設定時はローカルの `config/config.json` を使用）
-- 🧪 テストモード（既定で有効。実際のリポスト／いいねは行わず、判定結果だけをログに記録）
+- 🔁 1日1回、対象アカウントのその日の投稿を読み、キーワードに一致した投稿を自動リポスト
+- ⏰ 毎日 23:59 の自動実行（GAS の時間主導型トリガー）
+- ⚙️ 対象アカウント・キーワード・上限件数をスプレッドシートから設定
+- 📊 実行ログをスプレッドシートに保存（二重リポストの防止にも使用）
+- 🧪 テストモード（既定で有効。実際にはリポストせず、判定結果だけを記録）
 
 ### 🚀 Planned Features
 
 - 📝 ランダム投稿
 - 📅 定時投稿
-- 💬 自動返信
 - 📈 投稿統計
-- 🔔 エラー通知
-- ☁️ Google Cloud完全対応
+- 🔔 エラー通知（メール）
+
+---
+
+## ⚠️ はじめに：X API の利用料について
+
+**このBotを動かすには、X API の有料プラン（Basic 以上）が必要になる見込みです。**
+
+他人のアカウントの投稿を読み取る `GET /2/users/:id/tweets` は、無料プランでは使えません。
+無料プランで使えるのは投稿などの書き込みと、自分自身の情報取得のみです。
+
+| プラン | 投稿の読み取り | 目安の料金 |
+|---|---|---|
+| Free | ❌ 不可 | 無料 |
+| Basic | ⭕ 可能（月1万件程度） | 月額 $100〜200 程度 |
+| Pro | ⭕ 可能 | 月額 $5,000 程度 |
+
+料金・制限は変更されることがあるため、[X Developer Portal](https://developer.x.com/en/portal/products) で
+最新の内容を必ず確認してください。**無料プランのまま進めると、投稿の取得の段階でエラーになります。**
+
+なお、ブラウザ自動操作（スクレイピング）による代替は X の利用規約で禁止されているため、
+本プロジェクトでは採用していません。
 
 ---
 
 ## 🛠 Tech Stack
 
-- Node.js（ESM, `node:test`）
-- Playwright
-- Google Cloud Run
-- Google Cloud Scheduler
-- Google Apps Script (GAS)
-- Google Sheets（`googleapis`）
+- Google Apps Script（GAS）
+- Google スプレッドシート
+- X API v2（OAuth 1.0a ユーザー認証）
 
 ---
 
@@ -45,101 +62,143 @@ Google Cloud、Playwright、Google Apps Script（GAS）、Google スプレッド
 ```text
 Project-X-Butler/
 │
-├── config/
-│   └── config.example.json   # コピーして config/config.json を作る
-├── logs/                     # 実行ログ（.gitignore 対象）
-├── src/
-│   ├── actions/              # repost / like（テストモード分岐込み）
-│   ├── x/                    # login / profile / timeline（Playwright操作）
-│   ├── browser.js            # ブラウザ起動・セッション再利用
-│   ├── config.js             # ローカル設定 + Google Sheets 設定の読み込み
-│   ├── keyword.js            # キーワード判定ロジック
-│   ├── logger.js             # 実行ログ出力
-│   └── index.js              # エントリーポイント（一連の処理を実行）
-├── test/                     # node:test によるユニットテスト
-├── .env.example
-├── .gitignore
-├── package.json
-└── README.md
+├── gas/                      # スプレッドシートのGASエディタに貼り付けるコード
+│   ├── Main.gs               # メイン処理・メニュー・トリガー管理
+│   ├── Config.gs             # 設定シートと認証情報の読み込み
+│   ├── XApiClient.gs         # X API v2 呼び出し（OAuth 1.0a 署名を含む）
+│   ├── Keyword.gs            # キーワード判定
+│   ├── DateWindow.gs         # 「その日」の範囲計算
+│   ├── SheetLog.gs           # 実行ログの記録
+│   ├── Setup.gs              # 初期セットアップ（シート作成）
+│   └── Test.gs               # テスト（GASエディタから実行）
+├── README.md
+└── LICENSE
 ```
 
 ---
 
-## 🚀 Setup
+## 🚀 セットアップ手順
 
-```bash
-npm install
-cp .env.example .env
-cp config/config.example.json config/config.json
-```
+### 1. スプレッドシートを作る
 
-`.env` に X のログイン情報を設定します。
+Google ドライブで新しいスプレッドシートを作成します。名前は何でも構いません。
 
-```
-X_USERNAME=your-username-or-email
-X_PASSWORD=your-password
-TEST_MODE=true   # false にすると実際にリポスト/いいねを実行する
-```
+### 2. GASにコードを貼り付ける
 
-`config/config.json` でリポスト・いいねの対象キーワードや実行件数の上限を設定します（`config/config.example.json` 参照）。
+1. スプレッドシートのメニューから **拡張機能 > Apps Script** を開く
+2. `gas/` フォルダの各ファイルについて、同じ名前のスクリプトファイルを作り、中身をそのまま貼り付ける
+   - 左の「ファイル」の **＋ > スクリプト** から追加します
+   - 拡張子は不要です（`Main.gs` なら `Main` という名前で作成）
+   - 最初からある `コード.gs` は削除して構いません
+3. 保存する（Ctrl+S / ⌘+S）
 
-## ▶️ Usage
+### 3. X API の認証情報を用意する
 
-```bash
-npm start      # config.json / .env の設定に従って1回実行
-npm test       # ユニットテスト実行（実ブラウザ・実X接続は不要）
-```
+1. [X Developer Portal](https://developer.x.com/en/portal/dashboard) でアプリを作成する
+2. アプリの **User authentication settings** で、権限を **Read and write** に設定する
+   - ここが Read only のままだとリポストできません
+3. **Keys and tokens** タブから次の4つを取得する
+   - API Key
+   - API Key Secret
+   - Access Token
+   - Access Token Secret
+   - ※ 権限を Read and write に変更した場合、**アクセストークンを再生成**してください。
+     変更前に発行したトークンには書き込み権限が付いていません。
 
-`TEST_MODE=true`(既定値)のときは、キーワード判定とログ出力のみ行い、実際のクリック操作は行いません。本番実行前に必ずテストモードで動作を確認してください。
+### 4. 認証情報をGASに登録する
 
-## ⚙️ Google Sheets 連携（任意）
+Apps Script エディタの左メニューから **⚙️ プロジェクトの設定 > スクリプト プロパティ** を開き、
+次の4つを追加します。
 
-`config.json` の `googleSheets.enabled` を `true` にすると、以下のシートから設定・キーワードを読み込みます（ローカルの `config.json` を上書き）。
+| プロパティ名 | 値 |
+|---|---|
+| `X_API_KEY` | API Key |
+| `X_API_SECRET` | API Key Secret |
+| `X_ACCESS_TOKEN` | Access Token |
+| `X_ACCESS_TOKEN_SECRET` | Access Token Secret |
 
-- **Config シート**（`key`, `value` の2列）: `testMode` などの設定値
-- **Keywords シート**（`action`, `keyword`, `enabled` の3列）: `action` は `repost` または `like`、`enabled` を `false` にするとその行を無視
+> 認証情報はスプレッドシートのセルには書かないでください。
+> シートを共有した相手に見えてしまいます。スクリプトプロパティなら共有されません。
 
-サービスアカウントの認証情報ファイルへのパスを `.env` の `GOOGLE_SERVICE_ACCOUNT_FILE` に、対象スプレッドシートIDを `GOOGLE_SPREADSHEET_ID` に設定してください。サービスアカウントのメールアドレスをスプレッドシートの閲覧者として共有する必要があります。
+### 5. シートを作る
+
+スプレッドシートを再読み込みすると、メニューに **🌹 X Butler** が現れます。
+
+**🌹 X Butler > 初期セットアップ（シート作成）** を実行すると、
+「設定」「キーワード」「ログ」の3シートが作られます。
+
+初回実行時は Google の承認画面が出ます。「詳細」→「（プロジェクト名）に移動」→「許可」と進んでください。
+
+### 6. 設定を入力する
+
+**「設定」シート**
+
+| 項目 | 値の例 | 説明 |
+|---|---|---|
+| 対象アカウント | `example` | 監視したいアカウント名（@は不要） |
+| テストモード | ☑ | ONの間は実際にリポストしない |
+| 1回あたり最大リポスト数 | `10` | 1回の実行での上限 |
+| リプライも対象にする | ☐ | ONにするとリプライも判定対象 |
+
+**「キーワード」シート**
+
+| キーワード | 有効 |
+|---|---|
+| 新商品 | ☑ |
+| セール | ☑ |
+
+いずれか1つでも本文に含まれていればリポスト対象になります（英字の大文字・小文字は区別しません）。
+
+### 7. 動作を確認する
+
+**🌹 X Butler > 接続テスト** を実行します。
+認証・対象アカウント・投稿の取得・キーワード判定まで、リポストせずに一通り確認できます。
+
+続けて **🌹 X Butler > 今すぐ実行（テストモード）** を実行し、
+「ログ」シートに記録された内容が意図通りか確認してください。
+
+### 8. 自動実行を設定する
+
+**🌹 X Butler > 毎日23:59の自動実行を設定** を実行します。
+
+問題がなければ「設定」シートの **テストモードのチェックを外す**と、本番運用が始まります。
 
 ---
 
-## 🚀 Development Roadmap
+## ⏰ 実行タイミングについて
 
-### Day 1
+GAS の時間主導型トリガーには **±15分程度のゆれ**があります。
+23:59 に設定しても、実際の実行は 23:45〜0:15 の間になります。
 
-- [x] GitHub リポジトリ作成
-- [x] 開発環境準備
-- [x] Git Clone
-- [x] 初回コミット
+日付をまたいで実行された場合（0:10 に動いた場合など）も、
+**前日分を対象として処理する**ようになっているため、取りこぼしは起きません。
 
-### Day 2
+ただし、23:59 より後に投稿されたものはその日の実行では拾えません。
 
-- [x] npm 初期化
-- [x] Playwright インストール
-- [x] ブラウザ起動（`src/browser.js`）
+---
 
-### Day 3
+## 🧪 テスト
 
-- [x] X を開く
-- [x] ログイン（`src/x/login.js`、実アカウントでの動作確認は未実施）
+Apps Script エディタで、実行する関数に **`runAllTests`** を選んで実行してください。
+キーワード判定・日付計算・OAuth署名などを検証し、結果が実行ログに出ます。
 
-### Day 4
+OAuth 署名のテストは X 公式ドキュメント記載の例と突き合わせているため、
+API 呼び出しが失敗したときに「署名が原因かどうか」を切り分けられます。
 
-- [x] プロフィール取得（`src/x/profile.js`）
-- [x] 投稿一覧取得（`src/x/timeline.js`）
+---
 
-### Day 5
+## 🔍 うまくいかないときは
 
-- [x] キーワード判定（`src/keyword.js`）
-- [x] テストモード実装（`TEST_MODE` / `config.testMode`）
+| 症状 | 確認すること |
+|---|---|
+| `HTTP 403` が出る | アプリの権限が Read and write か。変更後にアクセストークンを再生成したか |
+| `HTTP 401` が出る | スクリプトプロパティの4つの値に余分な空白や改行が混ざっていないか |
+| 投稿の取得で失敗する | X API のプランが Basic 以上か（無料プランでは読み取り不可） |
+| 投稿が0件になる | 対象アカウントが鍵アカウントでないか。その日に投稿があるか |
+| リポストされない | 「設定」シートのテストモードがOFFになっているか |
+| メニューが出ない | スプレッドシートを再読み込みする |
 
-### Day 6
-
-- [x] 自動リポスト（`src/actions/repost.js`）
-
-### Day 7
-
-- [x] 自動いいね（`src/actions/like.js`）
+エラーの詳細は「ログ」シートに記録されます。
 
 ---
 
