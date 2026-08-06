@@ -12,6 +12,7 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu('🌹 X Butler')
     .addItem('初期セットアップ（シート作成）', 'setupSheets')
+    .addItem('セットアップ確認（ファイルの貼り忘れ）', 'checkInstallation')
     .addSeparator()
     .addItem('今すぐ実行（テストモード）', 'runNowInTestMode')
     .addItem('今すぐ実行（本番）', 'runNowForReal')
@@ -229,6 +230,68 @@ function showTriggerStatus() {
   );
 }
 
+// ---- 導入状態の確認 ----
+
+/**
+ * このBotが必要とするファイルの一覧。
+ * GAS には「ファイルを貼り忘れた」ことを知る手段がないため、
+ * 各ファイルの代表的な関数が定義されているかで代用する。
+ */
+var REQUIRED_FILES = [
+  { file: 'Main.gs', fn: 'runButler_' },
+  { file: 'Config.gs', fn: 'loadConfig' },
+  { file: 'XApiClient.gs', fn: 'getUserIdByUsername' },
+  { file: 'Keyword.gs', fn: 'judgeTweets' },
+  { file: 'DateWindow.gs', fn: 'resolveTargetDate' },
+  { file: 'SheetLog.gs', fn: 'appendLog' },
+  { file: 'Setup.gs', fn: 'setupSheets' },
+  { file: 'Diagnose.gs', fn: 'diagnoseAuth' },
+];
+
+/** グローバルに関数が定義されているかを、例外を出さずに判定する */
+function isFunctionDefined_(name) {
+  try {
+    if (typeof globalThis !== 'undefined' && typeof globalThis[name] === 'function') {
+      return true;
+    }
+  } catch (err) {
+    // globalThis が使えない環境なら次の方法にまわす
+  }
+  try {
+    return eval('typeof ' + name) === 'function';
+  } catch (err) {
+    return false;
+  }
+}
+
+/** 貼り忘れているファイル名の一覧を返す */
+function findMissingFiles_() {
+  var missing = [];
+
+  for (var i = 0; i < REQUIRED_FILES.length; i++) {
+    if (!isFunctionDefined_(REQUIRED_FILES[i].fn)) {
+      missing.push(REQUIRED_FILES[i].file);
+    }
+  }
+  return missing;
+}
+
+/** メニュー用：必要なファイルが揃っているか確認する */
+function checkInstallation() {
+  var missing = findMissingFiles_();
+
+  SpreadsheetApp.getUi().alert(
+    'セットアップ確認',
+    missing.length === 0
+      ? '✅ 必要なファイルはすべて揃っています。'
+      : '❌ 次のファイルが見つかりません。\n\n　' + missing.join('\n　') + '\n\n' +
+        'GitHub の gas/ フォルダから該当ファイルの中身をコピーし、\n' +
+        'スクリプトエディタで同じ名前のファイルを作って貼り付けてください。\n' +
+        '（貼り付けたあと保存を忘れずに）',
+    SpreadsheetApp.getUi().ButtonSet.OK
+  );
+}
+
 // ---- 動作確認 ----
 
 /**
@@ -237,6 +300,17 @@ function showTriggerStatus() {
 function testConnection() {
   var ui = SpreadsheetApp.getUi();
   var lines = [];
+
+  var missing = findMissingFiles_();
+  if (missing.length > 0) {
+    ui.alert(
+      '接続テスト',
+      '❌ 次のファイルが貼り付けられていません。\n\n　' + missing.join('\n　') + '\n\n' +
+      '先にこれらを追加してから、もう一度実行してください。',
+      ui.ButtonSet.OK
+    );
+    return;
+  }
 
   try {
     var config = loadConfig();
