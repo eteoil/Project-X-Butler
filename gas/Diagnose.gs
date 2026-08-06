@@ -5,6 +5,13 @@
  * 認証情報そのものは表示せず、文字数や形式の特徴だけを見る。
  */
 
+// Keys and tokens 画面には似た値が3種類並んでおり、OAuth 2.0 用の値を
+// 取り違えて貼るのが一番ありがちな失敗なので、名指しで案内する。
+var WRONG_SECTION_HINT =
+  'OAuth 1.0a の Access Token は「数字-英数字」の形（例: 1234567890-AbCd...）です。' +
+  'OAuth 2.0 の Client ID / Client Secret を貼っていませんか？ ' +
+  'Keys and tokens 画面の「Authentication Tokens > Access Token and Secret」から取得してください';
+
 // X Developer Portal が発行する値の、既知の形式
 var CREDENTIAL_SHAPES = [
   {
@@ -33,7 +40,7 @@ var CREDENTIAL_SHAPES = [
     expectedLength: null, // 「ユーザーID-英数字40文字」なので長さは可変
     check: function (v) {
       if (/^AAAA/.test(v)) return 'Bearer Token が入っている可能性があります';
-      if (!/^\d+-/.test(v)) return '「数字-英数字」の形になっていません。Access Token ではない可能性があります';
+      if (!/^\d+-/.test(v)) return WRONG_SECTION_HINT;
       return '';
     },
   },
@@ -44,6 +51,7 @@ var CREDENTIAL_SHAPES = [
     check: function (v) {
       if (/^AAAA/.test(v)) return 'Bearer Token が入っている可能性があります';
       if (v.indexOf('-') !== -1) return 'Access Token が入っている可能性があります';
+      if (v.length !== 45) return WRONG_SECTION_HINT;
       return '';
     },
   },
@@ -194,11 +202,18 @@ function summarize_(probes) {
   return [
     'どちらのホストでも認証できませんでした。次の順に確認してください。',
     '',
-    '1. 上の【1】に ⚠️ が付いていれば、その項目を貼り直す',
-    '2. Developer Portal の Keys and tokens で',
-    '　 Access Token と Secret を「Regenerate」して貼り直す',
-    '　（権限を Read and write に変えた場合は再生成が必須です）',
+    '1. 上の【1】に ⚠️ が付いていれば、まずその項目を貼り直す',
+    '　 Keys and tokens 画面には似た値が3種類あります。使うのは次の2つだけです。',
+    '　 ・Consumer Keys → API Key and Secret',
+    '　 ・Authentication Tokens → Access Token and Secret',
+    '　 「OAuth 2.0 Client ID and Client Secret」は使いません。',
+    '',
+    '2. Access Token と Secret を「Regenerate」して貼り直す',
+    '　（権限を Read and write に変えた場合は再生成が必須です。',
+    '　　表示は1回だけなので、その場でコピーしてください）',
+    '',
     '3. アプリが Project に紐づいているか確認する',
-    '　（Project に属さないアプリでは API v2 を使えません）',
+    '　（Project に属さないアプリでは API v2 を使えません。',
+    '　　ただしこの場合は 401 ではなく 403 になるのが普通です）',
   ];
 }
